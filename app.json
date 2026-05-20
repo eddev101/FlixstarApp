@@ -16,10 +16,13 @@
     },
     "android": {
   "permissions": ["INTERNET"],
+  "usesCleartextTraffic": true,
   "adaptiveIcon": {
     "foregroundImage": "./assets/icon.png",
     "backgroundColor": "#141414"
   },
+  "package": "com.eddev67.FlixstarApp"
+},
   "package": "com.eddev67.FlixstarApp"
 },
     "web": {
