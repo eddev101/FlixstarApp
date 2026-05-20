@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, FlatList, Image, TouchableOpacity,
   StyleSheet, ActivityIndicator
@@ -14,7 +14,9 @@ export default function WatchlistScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
-    React.useCallback(() => { fetchWatchlist(); }, [])
+    React.useCallback(() => {
+      fetchWatchlist();
+    }, [])
   );
 
   async function fetchWatchlist() {
@@ -22,93 +24,206 @@ export default function WatchlistScreen({ navigation }) {
     try {
       const existing = await AsyncStorage.getItem('watchlist');
       const watchlist = existing ? JSON.parse(existing) : [];
-      const fetched = await Promise.all(
+
+      const fetched = await Promise.allSettled(
         watchlist.map(async item => {
-          const url = item.type === 'movie'
-            ? `https://api.themoviedb.org/3/movie/${item.id}?api_key=${API_KEY}`
-            : `https://api.themoviedb.org/3/tv/${item.id}?api_key=${API_KEY}`;
+          if (!item?.id || !item?.type) return null;
+
+          const url =
+            item.type === 'movie'
+              ? `https://api.themoviedb.org/3/movie/${item.id}?api_key=${API_KEY}`
+              : `https://api.themoviedb.org/3/tv/${item.id}?api_key=${API_KEY}`;
+
           const res = await axios.get(url);
+
           return { ...res.data, type: item.type };
         })
       );
-      setItems(fetched);
-    } catch (e) { console.log(e); }
-    finally { setLoading(false); }
+
+      const clean = fetched
+        .filter(r => r.status === 'fulfilled' && r.value)
+        .map(r => r.value);
+
+      setItems(clean);
+    } catch (e) {
+      console.log("WATCHLIST ERROR:", e);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function removeItem(id, type) {
-    const existing = await AsyncStorage.getItem('watchlist');
-    let watchlist = existing ? JSON.parse(existing) : [];
-    watchlist = watchlist.filter(i => !(i.id === id.toString() && i.type === type));
-    await AsyncStorage.setItem('watchlist', JSON.stringify(watchlist));
-    fetchWatchlist();
+    try {
+      const existing = await AsyncStorage.getItem('watchlist');
+      let watchlist = existing ? JSON.parse(existing) : [];
+
+      watchlist = watchlist.filter(
+        i => !(String(i.id) === String(id) && i.type === type)
+      );
+
+      await AsyncStorage.setItem('watchlist', JSON.stringify(watchlist));
+
+      fetchWatchlist();
+    } catch (e) {
+      console.log(e);
+    }
   }
 
-  if (loading) return (
-    <View style={styles.loader}>
-      <ActivityIndicator size="large" color="#e50914" />
-    </View>
-  );
+  if (loading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color="#e50914" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-     <View style={styles.header}>
-             <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-               <Text style={styles.backText}>← Back</Text>
-             </TouchableOpacity>
+
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+
         <Text style={styles.headerTitle}>🔖 My Watchlist</Text>
       </View>
-      {items.length === 0
-        ? <View style={styles.empty}><Text style={styles.emptyText}>Your watchlist is empty</Text></View>
-        : <FlatList
+
+      {items.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyText}>Your watchlist is empty</Text>
+        </View>
+      ) : (
+        <FlatList
           data={items}
-          keyExtractor={item => item.id.toString()}
+          keyExtractor={(item, index) =>
+            `${item.id}-${index}`
+          }
           contentContainerStyle={{ padding: 16 }}
           renderItem={({ item }) => {
-            const title = item.title || item.name;
-            const year = (item.release_date || item.first_air_date || '').slice(0, 4);
+            const title = item.title || item.name || 'Unknown';
+            const year =
+              (item.release_date || item.first_air_date || '').slice(0, 4);
+
+            const poster = item.poster_path
+              ? `https://image.tmdb.org/t/p/w185${item.poster_path}`
+              : 'https://via.placeholder.com/70x100';
+
             return (
               <TouchableOpacity
                 style={styles.row}
-                onPress={() => item.type === 'movie'
-                  ? navigation.navigate('MovieDetail', { id: item.id })
-                  : navigation.navigate('TVShowDetail', { id: item.id })}
+                onPress={() =>
+                  item.type === 'movie'
+                    ? navigation.navigate('MovieDetail', { id: item.id })
+                    : navigation.navigate('TVShowDetail', { id: item.id })
+                }
               >
-                <Image
-                  source={{ uri: `https://image.tmdb.org/t/p/w185${item.poster_path}` }}
-                  style={styles.img}
-                />
+                <Image source={{ uri: poster }} style={styles.img} />
+
                 <View style={styles.info}>
                   <Text style={styles.title}>{title}</Text>
-                  <Text style={styles.meta}>{year} · {item.type === 'movie' ? 'Movie' : 'TV Show'}</Text>
-                  <Text style={styles.rating}>⭐ {item.vote_average?.toFixed(1)}</Text>
+                  <Text style={styles.meta}>
+                    {year} · {item.type === 'movie' ? 'Movie' : 'TV Show'}
+                  </Text>
+                  <Text style={styles.rating}>
+                    ⭐ {item.vote_average?.toFixed(1) || '0.0'}
+                  </Text>
                 </View>
-                <TouchableOpacity style={styles.removeBtn} onPress={() => removeItem(item.id, item.type)}>
+
+                <TouchableOpacity
+                  style={styles.removeBtn}
+                  onPress={() => removeItem(item.id, item.type)}
+                >
                   <Text style={styles.removeText}>✕</Text>
                 </TouchableOpacity>
               </TouchableOpacity>
             );
           }}
-        />}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingHorizontal: 16, paddingBottom: 14 },
-  backBtn: { backgroundColor: 'rgba(28,33,51,0.85)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginRight: 12 },
+
+  loader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0a0a0a'
+  },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 50,
+    paddingHorizontal: 16,
+    paddingBottom: 14
+  },
+
+  backBtn: {
+    backgroundColor: 'rgba(28,33,51,0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginRight: 12
+  },
+
   backText: { color: '#fff', fontSize: 14 },
-  headerTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  headerTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 'bold'
+  },
+
+  empty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+
   emptyText: { color: '#666', fontSize: 16 },
-  row: { flexDirection: 'row', marginBottom: 14, backgroundColor: '#151515', borderRadius: 10, overflow: 'hidden' },
-  img: { width: 70, height: 100, backgroundColor: '#1a1a1a' },
-  info: { flex: 1, padding: 12, justifyContent: 'center' },
-  title: { color: '#fff', fontSize: 15, fontWeight: '600', marginBottom: 4 },
+
+  row: {
+    flexDirection: 'row',
+    marginBottom: 14,
+    backgroundColor: '#151515',
+    borderRadius: 10,
+    overflow: 'hidden'
+  },
+
+  img: { width: 70, height: 100 },
+
+  info: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'center'
+  },
+
+  title: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4
+  },
+
   meta: { color: '#888', fontSize: 13, marginBottom: 4 },
+
   rating: { color: '#f5c518', fontSize: 13 },
-  removeBtn: { padding: 12, justifyContent: 'center' },
-  removeText: { color: '#e50914', fontSize: 18 },
+
+  removeBtn: {
+    padding: 12,
+    justifyContent: 'center'
+  },
+
+  removeText: {
+    color: '#e50914',
+    fontSize: 18
+  }
 });
