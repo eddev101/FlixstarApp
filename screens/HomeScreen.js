@@ -69,36 +69,52 @@ export default function HomeScreen({ navigation }) {
   }
 
 
-  async function fetchAll() {
+ async function safeFetch(url) {
   try {
-    const results = await Promise.allSettled([
-      axios.get(`https://api.themoviedb.org/3/trending/movie/day?api_key=${API_KEY}`),
-      axios.get(`https://api.themoviedb.org/3/movie/now_playing?api_key=${API_KEY}`),
-      axios.get(`https://api.themoviedb.org/3/movie/top_rated?api_key=${API_KEY}`),
-      axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${API_KEY}`),
-      axios.get(`https://api.themoviedb.org/3/trending/tv/day?api_key=${API_KEY}`),
+    const res = await axios.get(url, {
+      timeout: 10000, // prevents hanging on APK
+    });
+    return res.data;
+  } catch (e) {
+    console.log("FETCH ERROR:", url, e?.message);
+    return null;
+  }
+}
+
+async function fetchAll() {
+  setLoading(true);
+
+  try {
+    const [
+      trendingMovies,
+      nowPlaying,
+      topRated,
+      trendingTvWeek,
+      trendingTvDay
+    ] = await Promise.all([
+      safeFetch(`https://api.themoviedb.org/3/trending/movie/day?api_key=${API_KEY}`),
+      safeFetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${API_KEY}`),
+      safeFetch(`https://api.themoviedb.org/3/movie/top_rated?api_key=${API_KEY}`),
+      safeFetch(`https://api.themoviedb.org/3/trending/tv/week?api_key=${API_KEY}`),
+      safeFetch(`https://api.themoviedb.org/3/trending/tv/day?api_key=${API_KEY}`),
     ]);
 
-    const t = results[0].status === "fulfilled" ? results[0].value.data : { results: [] };
-    const n = results[1].status === "fulfilled" ? results[1].value.data : { results: [] };
-    const tr = results[2].status === "fulfilled" ? results[2].value.data : { results: [] };
-    const ts = results[3].status === "fulfilled" ? results[3].value.data : { results: [] };
-    const ps = results[4].status === "fulfilled" ? results[4].value.data : { results: [] };
+    const movies = trendingMovies?.results || [];
+    const now = nowPlaying?.results || [];
+    const top = topRated?.results || [];
+    const tvWeek = trendingTvWeek?.results || [];
+    const tvDay = trendingTvDay?.results || [];
 
-    const movies = t.results || [];
-    const tvs = ts.results || [];
+    setSlider([...movies, ...tvWeek].slice(0, 6));
 
-    const combined = [...movies, ...tvs].sort(() => Math.random() - 0.5).slice(0, 6);
-
-    setSlider(combined);
-    setTrending(t.results.slice(0, 20));
-    setNowPlaying(n.results.slice(0, 20));
-    setTopRated(tr.results.slice(0, 20));
-    setTrendingShows(ts.results.slice(0, 20));
-    setPopShows(ps.results.slice(0, 20));
+    setTrending(movies.slice(0, 20));
+    setNowPlaying(now.slice(0, 20));
+    setTopRated(top.slice(0, 20));
+    setTrendingShows(tvWeek.slice(0, 20));
+    setPopShows(tvDay.slice(0, 20));
 
   } catch (e) {
-    console.log("HOME FETCH ERROR:", e);
+    console.log("HOME CRASH:", e?.message);
   } finally {
     setLoading(false);
   }
