@@ -70,29 +70,39 @@ export default function HomeScreen({ navigation }) {
 
 
   async function fetchAll() {
-    try {
-      const [t, n, tr, ts, ps] = await Promise.all([
-        axios.get(`https://api.themoviedb.org/3/trending/movie/day?api_key=${API_KEY}`),
-        axios.get(`https://api.themoviedb.org/3/movie/now_playing?api_key=${API_KEY}`),
-        axios.get(`https://api.themoviedb.org/3/movie/top_rated?api_key=${API_KEY}`),
-        axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${API_KEY}`),
-        axios.get(`https://api.themoviedb.org/3/trending/tv/day?api_key=${API_KEY}`),
-      ]);
-      const movies = t.data.results;
-      const tvs = ts.data.results;
-      const combined = [...movies, ...tvs].sort(() => Math.random() - 0.5).slice(0, 6);
-      setSlider(combined);
-      setTrending(t.data.results.slice(0, 20));
-      setNowPlaying(n.data.results.slice(0, 20));
-      setTopRated(tr.data.results.slice(0, 20));
-      setTrendingShows(ts.data.results.slice(0, 20));
-      setPopShows(ps.data.results.slice(0, 20));
-    } catch (e) {
-      console.log(e);
-    } finally {
-      setLoading(false);
-    }
+  try {
+    const results = await Promise.allSettled([
+      axios.get(`https://api.themoviedb.org/3/trending/movie/day?api_key=${API_KEY}`),
+      axios.get(`https://api.themoviedb.org/3/movie/now_playing?api_key=${API_KEY}`),
+      axios.get(`https://api.themoviedb.org/3/movie/top_rated?api_key=${API_KEY}`),
+      axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${API_KEY}`),
+      axios.get(`https://api.themoviedb.org/3/trending/tv/day?api_key=${API_KEY}`),
+    ]);
+
+    const t = results[0].status === "fulfilled" ? results[0].value.data : { results: [] };
+    const n = results[1].status === "fulfilled" ? results[1].value.data : { results: [] };
+    const tr = results[2].status === "fulfilled" ? results[2].value.data : { results: [] };
+    const ts = results[3].status === "fulfilled" ? results[3].value.data : { results: [] };
+    const ps = results[4].status === "fulfilled" ? results[4].value.data : { results: [] };
+
+    const movies = t.results || [];
+    const tvs = ts.results || [];
+
+    const combined = [...movies, ...tvs].sort(() => Math.random() - 0.5).slice(0, 6);
+
+    setSlider(combined);
+    setTrending(t.results.slice(0, 20));
+    setNowPlaying(n.results.slice(0, 20));
+    setTopRated(tr.results.slice(0, 20));
+    setTrendingShows(ts.results.slice(0, 20));
+    setPopShows(ps.results.slice(0, 20));
+
+  } catch (e) {
+    console.log("HOME FETCH ERROR:", e);
+  } finally {
+    setLoading(false);
   }
+}
 
   function goToDetail(id, type) {
     if (type === 'movie' || type === undefined) navigation.navigate('MovieDetail', { id });
