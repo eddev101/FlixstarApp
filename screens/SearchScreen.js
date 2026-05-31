@@ -15,18 +15,29 @@ export default function SearchScreen({ navigation }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  async function search(text) {
-    setQuery(text);
-    if (text.length < 2) { setResults([]); return; }
-    setLoading(true);
-    try {
-      const res = await axios.get(
-        `https://api.themoviedb.org/3/search/multi?api_key=${API_KEY}&query=${encodeURIComponent(text)}&page=1`
-      );
-      setResults(res.data.results);
-    } catch (e) { console.log(e); }
-    finally { setLoading(false); }
-  }
+  async function doSearch(text) {
+  setLoading(true)
+  try {
+    const res = await axios.get(`https://api.themoviedb.org/3/search/multi?api_key=${API_KEY}&language=en-US&query=${encodeURIComponent(text)}`)
+    const results = res.data.results
+
+    // Filter out adult content same way as collections
+    const filtered = results.filter(item => {
+      // Remove items marked as adult by TMDB
+      if (item.adult === true) return false
+      // Filter people known only for adult content
+      if (item.media_type === 'person' && item.known_for_department === 'Adult') return false
+      // Filter by title/name keywords
+      const title = (item.title || item.name || '').toLowerCase()
+      const nsfw = ['porn', 'xxx', 'anal', 'nude', 'hentai', 'erotic', 'explicit', 'nsfw', 'sex tape', 'hardcore']
+      if (nsfw.some(word => title.includes(word))) return false
+      return true
+    })
+
+    setResults(filtered)
+  } catch (e) { console.log(e) }
+  finally { setLoading(false) }
+}
 
   function goToDetail(item) {
     if (item.media_type === 'movie') navigation.navigate('MovieDetail', { id: item.id });
