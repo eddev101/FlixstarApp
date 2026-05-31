@@ -34,16 +34,28 @@ export default function CollectionsScreen({ navigation }) {
     finally { setLoading(false); }
   }
 
-  async function searchCollections(text) {
-    setQuery(text);
-    if (text.length < 2) { loadPredefined(); return; }
-    setSearching(true);
-    try {
-      const res = await axios.get(`https://api.themoviedb.org/3/search/collection?api_key=${API_KEY}&query=${encodeURIComponent(text)}`);
-      setCollections(res.data.results);
-    } catch (e) { console.log(e); }
-    finally { setSearching(false); }
-  }
+  async function searchCollections(e) {
+  e.preventDefault()
+  if (!query.trim()) { loadCollections(); return }
+  setLoading(true)
+  try {
+    const res = await axios.get(`https://api.themoviedb.org/3/search/collection?api_key=${API_KEY}&language=en-US&query=${encodeURIComponent(query)}`)
+    const collections = res.data.results
+
+    // Check each collection's parts for adult content — same as your original site
+    const filtered = await Promise.all(
+      collections.map(async c => {
+        try {
+          const details = await axios.get(`https://api.themoviedb.org/3/collection/${c.id}?api_key=${API_KEY}&language=en-US`)
+          const nonAdult = details.data.parts.filter(movie => !movie.adult)
+          return nonAdult.length > 0 ? c : null
+        } catch { return null }
+      })
+    )
+    setCollections(filtered.filter(Boolean))
+  } catch (e) { console.log(e) }
+  finally { setLoading(false) }
+}
 
   if (loading) return <View style={styles.loader}><ActivityIndicator size="large" color={BLUE} /></View>;
 
