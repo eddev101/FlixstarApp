@@ -19,6 +19,7 @@ const CARD_BG = '#1c2133';
 export default function TVShowDetailScreen({ route, navigation }) {
   const { id } = route.params;
   const [show, setShow] = useState(null);
+  const [imdbId, setImdbId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeServer, setActiveServer] = useState(null);
   const [showPlayer, setShowPlayer] = useState(false);
@@ -35,20 +36,27 @@ export default function TVShowDetailScreen({ route, navigation }) {
   useEffect(() => { fetchShow(); }, [id]);
   useEffect(() => { if (show) fetchEpisodes(selectedSeason); }, [selectedSeason, show]);
 
-  async function fetchShow() {
-    try {
-      const res = await axios.get(
-        `https://api.themoviedb.org/3/tv/${id}?api_key=${API_KEY}&append_to_response=credits,videos,recommendations,external_ids`
-      );
-      setShow(res.data);
-     const imdbId = res.data.external_ids?.imdb_id;
-      setActiveServer(imdbId
-        ? `https://streamimdb.ru/embed/tv/${imdbId}`
-        : `https://player.videasy.net/tv/${id}`
-      )
-    } catch (e) { console.log(e); }
-    finally { setLoading(false); }
+ async function fetchShow() {
+  try {
+    const res = await axios.get(
+      `https://api.themoviedb.org/3/tv/${id}?api_key=${API_KEY}&append_to_response=credits,videos,recommendations,external_ids`
+    );
+    
+    setShow(res.data);
+    
+    const fetchedImdbId = res.data.external_ids?.imdb_id;
+    setImdbId(fetchedImdbId);                    
+
+    setActiveServer(fetchedImdbId
+      ? `https://streamimdb.ru/embed/tv/${fetchedImdbId}`
+      : `https://player.videasy.net/tv/${id}`
+    );
+  } catch (e) {
+    console.log(e);
+  } finally {
+    setLoading(false);
   }
+}
 
   async function fetchEpisodes(season) {
     try {
@@ -83,26 +91,32 @@ export default function TVShowDetailScreen({ route, navigation }) {
   }
 
   function playEpisode(season, episode) {
-    setSelectedSeason(season); setSelectedEpisode(episode);
-    setActiveServer(
-      imdbId
-      ? `https://streamimdb.ru/embed/tv/${imdbId}/${season}/${episode}`
-      : `https://player.videasy.net/tv/${id}/${season}/${episode}`
-  )
-    saveTVContinueWatching(id, season, episode);
-    setShowPlayer(true);
+  setSelectedSeason(season);
+  setSelectedEpisode(episode);
+
+  if (imdbId) {
+    setActiveServer(`https://streamimdb.ru/embed/tv/${imdbId}/${season}/${episode}`);
+  } else {
+    setActiveServer(`https://player.videasy.net/tv/${id}/${season}/${episode}`);
   }
+
+  saveTVContinueWatching(id, season, episode);
+  setShowPlayer(true);
+}
 
   if (loading) return <View style={styles.loader}><ActivityIndicator size="large" color={BLUE} /></View>;
   if (!show) return null;
 
   const servers = [
-    { name: 'StreamIMDB', url: imdbId ? `https://streamimdb.ru/embed/tv/${imdbId}/${selectedSeason}/${selectedEpisode}` : null },
+    { 
+      name: 'StreamIMDB', 
+      url: imdbId ? `https://streamimdb.ru/embed/tv/${imdbId}/${selectedSeason}/${selectedEpisode}` : null 
+    },
     { name: 'Videasy', url: `https://player.videasy.net/tv/${id}/${selectedSeason}/${selectedEpisode}` },
     { name: 'Vidsrc', url: `https://vidsrc.me/embed/tv?tmdb=${id}&season=${selectedSeason}&episode=${selectedEpisode}` },
     { name: '2Embed', url: `https://hnembed.cc/embed/tv/${id}/${selectedSeason}/${selectedEpisode}` },
     { name: 'SuperEmbed', url: `https://multiembed.mov?video_id=${id}&tmdb=1&s=${selectedSeason}&e=${selectedEpisode}` },
-  ];
+  ].filter(s => s.url !== null);
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
