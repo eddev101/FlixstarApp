@@ -34,27 +34,50 @@ export default function CollectionsScreen({ navigation }) {
     finally { setLoading(false); }
   }
 
-  async function searchCollections(e) {
-  e.preventDefault()
-  if (!query.trim()) { loadCollections(); return }
-  setLoading(true)
-  try {
-    const res = await axios.get(`https://api.themoviedb.org/3/search/collection?api_key=${API_KEY}&language=en-US&query=${encodeURIComponent(query)}`)
-    const collections = res.data.results
+  async function searchCollections(text) {
+  setQuery(text);
 
-    // Check each collection's parts for adult content — same as your original site
+  if (!text.trim()) {
+    loadPredefined();
+    return;
+  }
+
+  setSearching(true);
+
+  try {
+    const res = await axios.get(
+      `https://api.themoviedb.org/3/search/collection?api_key=${API_KEY}&language=en-US&query=${encodeURIComponent(text)}`
+    );
+
+    const collections = res.data.results;
+
+    // Check each collection's parts for adult content
     const filtered = await Promise.all(
       collections.map(async c => {
         try {
-          const details = await axios.get(`https://api.themoviedb.org/3/collection/${c.id}?api_key=${API_KEY}&language=en-US`)
-          const nonAdult = details.data.parts.filter(movie => !movie.adult)
-          return nonAdult.length > 0 ? c : null
-        } catch { return null }
+          const details = await axios.get(
+            `https://api.themoviedb.org/3/collection/${c.id}?api_key=${API_KEY}&language=en-US`
+          );
+
+          const nonAdult = details.data.parts.filter(
+            movie => !movie.adult
+          );
+
+          return nonAdult.length > 0
+            ? { ...c, parts: nonAdult }
+            : null;
+        } catch {
+          return null;
+        }
       })
-    )
-    setCollections(filtered.filter(Boolean))
-  } catch (e) { console.log(e) }
-  finally { setLoading(false) }
+    );
+
+    setCollections(filtered.filter(Boolean));
+  } catch (e) {
+    console.log(e);
+  } finally {
+    setSearching(false);
+  }
 }
 
   if (loading) return <View style={styles.loader}><ActivityIndicator size="large" color={BLUE} /></View>;
