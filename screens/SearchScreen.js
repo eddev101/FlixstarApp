@@ -16,7 +16,15 @@ export default function SearchScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
 
   async function doSearch(text) {
-  setLoading(true)
+  setQuery(text);
+
+  if (!text.trim()) {
+    setResults([]);
+    return;
+  }
+
+  setLoading(true);
+    
   try {
     const res = await axios.get(`https://api.themoviedb.org/3/search/multi?api_key=${API_KEY}&language=en-US&query=${encodeURIComponent(text)}`)
     const results = res.data.results
@@ -67,8 +75,10 @@ export default function SearchScreen({ navigation }) {
             placeholder="Search movies, shows, people..."
             placeholderTextColor="#555"
             value={query}
-            onChangeText={search}
-            autoCorrect={false}
+            onChangeText={(text) => {
+            setQuery(text);
+            doSearch(text);
+          }}
           />
           {query.length > 0 && (
             <TouchableOpacity onPress={() => { setQuery(''); setResults([]); }}>
